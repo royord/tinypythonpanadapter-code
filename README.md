@@ -45,6 +45,11 @@ Options:
                         No. of spectra per waterfall line
   --waterfall_palette=WATERFALL_PALETTE
                         Waterfall color palette (1 or 2)
+  --disable_onscreen_help
+                        Disable onscreen help
+  --list_rigs           List available Rigs
+  --search_rigs=SEARCH_RIGS
+                        Rigs search string
 ```
 
 ## Version History
