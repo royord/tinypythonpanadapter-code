@@ -277,6 +277,23 @@ def cpu_load(interval):
         times_store = times
         cpu_usage = [usr, sys, os.getloadavg()[0]]
 
+if opt.list_rigs or opt.search_rigs!=None:
+    if opt.list_rigs:
+        print("Listing rigs...")
+        with open("hamlib_list.txt", 'r') as f:
+            c = f.read()
+            print(c)
+        sys.exit(0)
+    if opt.search_rigs:
+        print(f"Searching rigs...{opt.search_rigs}")
+        with open("hamlib_list.txt", 'r') as f:
+            c = f.read().splitlines()
+            for n, l in enumerate(c):
+                if n == 0:
+                    print(l)
+                if opt.search_rigs in l and n > 0:
+                    print(l)
+            sys.exit(0)
 
 # Screen setup parameters
 
@@ -442,6 +459,7 @@ nframe = 0
 t_frame0 = time.time()
 led_overflow_ct = 0
 startqueue = True
+
 while True:
 
     nframe += 1  # keep track of loop count FWIW
