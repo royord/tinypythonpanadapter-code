@@ -571,9 +571,11 @@ while True:
                 lines = ["KEYBOARD CONTROLS:",
                          "(R) Reset display; (Q) Quit program",
                          "Change upper plot dB limit:  (U) increase; (u) decrease",
-                         "Change lower plot dB limit:  (L) increase; (l) decrease",
-                         "Change WF palette upper limit: (B) increase; (b) decrease",
-                         "Change WF palette lower limit: (D) increase; (d) decrease"]
+                         "Change lower plot dB limit:  (L) increase; (l) decrease"
+                        ]
+                if opt.waterfall:
+                    lines.append("Change WF palette upper limit: (B) increase; (b) decrease")
+                    lines.append("Change WF palette lower limit: (D) increase; (d) decrease")
                 if opt.control != "none":
                     lines.append("Change rcvr freq: (rt arrow) increase; (lt arrow) decrease")
                     lines.append("   Use SHIFT for bigger steps")
