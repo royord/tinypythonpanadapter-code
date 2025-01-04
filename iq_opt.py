@@ -98,6 +98,8 @@ op.add_option("--waterfall_acc", action="store", type="int", dest="waterfall_acc
               help="No. of spectra per waterfall line")
 op.add_option("--waterfall_palette", action="store", type="int", dest="waterfall_palette",
               help="Waterfall color palette (1 or 2)")
+op.add_option("--disable_onscreen_help", action="store_true", dest="disable_onscreen_help",
+              help="Disable onscreen help")
 
 # The following are the default values which are used if not specified in the
 # command line.  You may want to edit them to be close to your normal operating needs.
