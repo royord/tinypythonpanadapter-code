@@ -44,6 +44,7 @@ import subprocess
 import sys
 import threading
 import time
+import psutil
 
 import numpy as np
 import pygame as pg
@@ -267,15 +268,20 @@ def cpu_load(interval):
     global cpu_usage
     times_store = np.array(os.times())
     # Will return: fraction usr time, sys time, and 1-minute load average
-    cpu_usage = [0., 0., os.getloadavg()[0]]
+    # cpu_usage = [0., 0., os.getloadavg()[0]]
+    cpu_usage = [0., 0., psutil.getloadavg()[0]]
     while True:
         time.sleep(interval)
         times = np.array(os.times())
         dtimes = times - times_store  # difference since last loop
-        usr = dtimes[0] / dtimes[4]  # fraction, 0 - 1
-        sys = dtimes[1] / dtimes[4]
+        usr = None
+        sys = None
+        if dtimes[4] > 0 and dtimes!=None:
+            usr = dtimes[0] / dtimes[4]  # fraction, 0 - 1
+            sys = dtimes[1] / dtimes[4]
         times_store = times
-        cpu_usage = [usr, sys, os.getloadavg()[0]]
+        # cpu_usage = [usr, sys, os.getloadavg()[0]]
+        cpu_usage = [usr, sys, psutil.getloadavg()[0]]
 
 if opt.list_rigs or opt.search_rigs!=None:
     if opt.list_rigs:
@@ -525,7 +531,9 @@ while True:
         my_in_data_s = dataIn.get_queued_data()  # timeout protected
 
         # Convert string of 16-bit I,Q samples to complex floating
-        iq_local = np.fromstring(my_in_data_s, dtype=np.int16).astype('float32')
+        # iq_local = np.fromstring(my_in_data_s, dtype=np.int16).astype('float32')
+        iq_local = np.frombuffer(my_in_data_s, dtype=np.int16).astype('float32')
+
         re_d = np.array(iq_local[1::2])  # right input (I)
         im_d = np.array(iq_local[0::2])  # left  input (Q)
 
