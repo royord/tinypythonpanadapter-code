@@ -100,6 +100,10 @@ op.add_option("--waterfall_palette", action="store", type="int", dest="waterfall
               help="Waterfall color palette (1 or 2)")
 op.add_option("--disable_onscreen_help", action="store_true", dest="disable_onscreen_help",
               help="Disable onscreen help")
+op.add_option("--list_rigs", action="store_true", dest="list_rigs",
+              help="List available Rigs")
+op.add_option("--search_rigs", action="store", type="string", dest="search_rigs",
+              help="Rigs search string")
 
 # The following are the default values which are used if not specified in the
 # command line.  You may want to edit them to be close to your normal operating needs.
