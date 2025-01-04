@@ -546,7 +546,8 @@ while True:
         nsum = opt.waterfall_accumulation  # 2d spectra per wf line
         mywf.calculate(sp_log, nsum, surf_wf)
         surf_main.blit(surf_wf, (x_spectra, y_wf + 1))
-
+    if opt.disable_onscreen_help:
+        info_phase = 0
     if info_phase > 0:
         # Assemble and show semi-transparent overlay info screen
         # This takes cpu time, so don't recompute it too often. (DSP & graphics
