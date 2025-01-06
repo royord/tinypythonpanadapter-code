@@ -281,7 +281,8 @@ def cpu_load(interval):
 # Screen setup parameters
 
 if opt.lcd4:  # setup for directfb (non-X) graphics
-    SCREEN_SIZE = (480, 272)  # default size for the 4" LCD (480x272)
+    #    SCREEN_SIZE = (480, 272)  # default size for the 4" LCD (480x272)
+    SCREEN_SIZE = (800, 480)  # default size for the 7" Touch Screen
     SCREEN_MODE = pg.FULLSCREEN
     # If we are root, we can set up LCD4 brightness.
     brightness = str(min(100, max(0, opt.lcd4_brightness)))  # validated string
