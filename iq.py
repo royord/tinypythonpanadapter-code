@@ -49,9 +49,9 @@ import psutil
 import numpy as np
 import pygame as pg
 
-import iq_dsp as dsp
-import iq_opt as options
-import iq_wf as wf
+import lib.iq_dsp as dsp
+import lib.iq_opt as options
+import lib.iq_wf as wf
 
 # Some colors in PyGame style
 BLACK = (0, 0, 0)
@@ -436,11 +436,11 @@ print("Update interval = %.2f ms" % float(1000 * chunk_time))
 # Initialize input mode, RTL or AF
 # This starts the input stream, so place it close to start of main loop.
 if opt.source == "rtl":  # input from RTL dongle (and freq control)
-    import iq_rtl as rtl
+    import lib.iq_rtl as rtl
 
     dataIn = rtl.RtlIn(opt)
 elif opt.source == 'audio':  # input from audio card
-    import iq_af as af
+    import lib.iq_af as af
 
     mainqueueLock = af.queueLock  # queue and lock only for soundcard
     dataIn = af.DataInput(opt)
@@ -449,7 +449,7 @@ else:
     quit_all()
 
 if opt.control == "si570":
-    import si570control
+    import lib.si570control as si570control
 
     mysi570 = si570control.Si570control()
     mysi570.setFreq(opt.si570_frequency / 1000.)  # Set starting freq.
