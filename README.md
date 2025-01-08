@@ -1,5 +1,5 @@
 # README
-
+![SampleImage.png](ReadmeImages/SampleImage.png)
 ## Help Content
 The following are the options that can be provided to the script in order to get the view providing the correct display for operating.
 ```
