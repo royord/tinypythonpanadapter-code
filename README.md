@@ -1,6 +1,12 @@
 # README
+This project was created to allow a PAN adapter to be connected to IQ signals or to a SDR.
+
 ![SampleImage.png](ReadmeImages/SampleImage.png)
-## Help Content
+
+## Configuration
+- Review ```try.sh``` to see standard scripts that will launch the application.
+
+## Command Help Content
 The following are the options that can be provided to the script in order to get the view providing the correct display for operating.
 ```
 Options:
