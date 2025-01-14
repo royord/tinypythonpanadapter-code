@@ -3,6 +3,13 @@ This project was created to allow a PAN adapter to be connected to IQ signals or
 
 ![SampleImage.png](ReadmeImages/SampleImage.png)
 
+## Installation
+1. Clone the repository
+2. Run the following command
+```python -m pip install -r requirements.txt```
+3. 
+
+
 ## Configuration
 - Review ```try.sh``` to see standard scripts that will launch the application.
 
