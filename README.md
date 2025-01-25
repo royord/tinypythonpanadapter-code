@@ -105,4 +105,5 @@ For a free subscription, sign up at https://lists.sourceforge.net/lists/listinfo
 
 4. Text files (e.g. Python source) in the enclosed zip archive may be in Linux format. They can be read with Microsoft Word or similar software or converted to Windows format using the gedit text editor (available for Linux or Windows at https://wiki.gnome.org/Apps/Gedit).
 
-
+May be helpful to be familiar with the following:
+https://www.raspberrypi.com/news/using-python-with-virtual-environments-the-magpi-148/
