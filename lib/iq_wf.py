@@ -31,106 +31,131 @@ import pygame as pg
 
 
 def palette_color(palette, val, vmin0, vmax0):
-    """ translate a data value into a color according to several different
-        methods. (PALETTE variable)
-        input: value of data, minimum value, maximum value for transform
-        return: pygame color tuple
+    """Translate a data value into a color using different palette methods.
+
+    Args:
+        palette (int): Color scheme selection (1 or 2)
+        val (float): Data value to convert to color
+        vmin0 (float): Minimum value for color scale
+        vmax0 (float): Maximum value for color scale
+
+    Returns:
+        tuple: RGB color values (r, g, b) between 0-255
     """
+    # Normalize value to 0-1 range, then scale to 0-2
     f = (float(val) - vmin0) / (vmax0 - vmin0)  # btw 0 and 1.0
     f *= 2
-    f = min(1., max(0., f))
-    if palette == 1:
+    f = min(1., max(0., f))  # Clamp value between 0 and 1
+
+    if palette == 1:  # Simple RGB stepped palette
         g, b = 0, 0
-        if f < 0.333:
+        if f < 0.333:  # Red phase
             r = int(f * 255 * 3)
-        elif f < 0.666:
+        elif f < 0.666:  # Yellow phase (red + green)
             r = 200
             g = int((f - .333) * 255 * 3)
-        else:
+        else:  # White phase (red + green + blue)
             r = 200
             g = 200
             b = int((f - .666) * 255 * 3)
-    elif palette == 2:
-        bright = min(1.0, f + 0.15)
+    elif palette == 2:  # Continuous rainbow palette
+        bright = min(1.0, f + 0.15)  # Brightness adjustment
         tpi = 2 * math.pi
+        # Use cosine waves with phase shifts for smooth color transitions
         r = bright * 128 * (1.0 + math.cos(tpi * f))
         g = bright * 128 * (1.0 + math.cos(tpi * f + tpi / 3))
         b = bright * 128 * (1.0 + math.cos(tpi * f + 2 * tpi / 3))
     else:
         print("Invalid palette requested!")
         sys.exit()
+
+    # Ensure color values stay within valid RGB range (0-255)
     return max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b))
 
 
 class Wf(object):
-    """ Make a waterfall '3d' display of spectral power vs frequency & time.
-        init: min, max palette parameter, no. of steps between min & max,
-        size for each freq,time data plot 'pixel' (a box)
+    """Creates and manages a waterfall spectrum display showing power vs frequency and time.
+
+    Attributes:
+        opt: Options object containing waterfall_palette setting
+        vmin: Minimum data value for color scaling
+        vmax: Maximum data value for color scaling
+        nsteps: Number of discrete color steps
+        pxsz: Pixel size (width, height) for each data point
     """
 
     def __init__(self, opt, vmin, vmax, nsteps, pxsz):
-        """ Initialize data and
-            pre-calculate palette & filled rect surfaces, based on vmin, vmax,
-            no. of surfaces = nsteps
-        """
+        """Initialize waterfall display parameters and pre-calculate color palette."""
         self.opt = opt
         self.vmin = vmin
-        self.vmin_rst = vmin
+        self.vmin_rst = vmin  # Store reset value
         self.vmax = vmax
-        self.vmax_rst = vmax
+        self.vmax_rst = vmax  # Store reset value
         self.nsteps = nsteps
         self.pixel_size = pxsz
-        self.firstcalc = True
+        self.firstcalc = True  # Flag for initial calculation
         self.initialize_palette()
 
     def initialize_palette(self):
-        """ Set up surfaces for each possible color value in list self.pixels.
-        """
+        """Create a list of pre-rendered surfaces for each color step."""
         self.pixels = list()
         for istep in range(self.nsteps):
+            # Create a new surface for each color step
             ps = pg.Surface(self.pixel_size)
+            # Calculate corresponding data value for this step
             val = float(istep) * (self.vmax - self.vmin) / self.nsteps + self.vmin
+            # Get RGB color for this value
             color = palette_color(self.opt.waterfall_palette, val, self.vmin, self.vmax)
-            ps.fill(color)
+            ps.fill(color)  # Fill surface with color
             self.pixels.append(ps)
 
     def set_range(self, vmin, vmax):
-        """ define a new data range for palette calculation going forward.
-            input: vmin, vmax
-        """
+        """Update the data range and regenerate the color palette."""
         self.vmin = vmin
         self.vmax = vmax
-
         self.initialize_palette()
 
     def reset_range(self):
-        """ reset palette data range to original settings.
-        """
+        """Restore original data range and regenerate palette."""
         self.vmin = self.vmin_rst
         self.vmax = self.vmax_rst
         self.initialize_palette()
         return self.vmin, self.vmax
 
-    def calculate(self, datalist, nsum, surface):  # (datalist is np.array)
-        if self.firstcalc:  # First time through,
-            self.datasize = len(datalist)  # pick up dimension of datalist
-            self.wfacc = np.zeros(self.datasize)  # and establish accumulator
-            self.dx = float(surface.get_width()) / self.datasize  # x spacing of wf cells
-            # Note: self.dx must be >= 1
+    def calculate(self, datalist, nsum, surface):
+        """Update and render the waterfall display.
+
+        Args:
+            datalist (np.array): Input spectral data
+            nsum (int): Number of spectra to accumulate before updating
+            surface: Pygame surface to draw on
+        """
+        if self.firstcalc:  # Initial setup
+            self.datasize = len(datalist)  # Store data length
+            self.wfacc = np.zeros(self.datasize)  # Accumulator array
+            self.dx = float(surface.get_width()) / self.datasize  # Horizontal pixel spacing
             self.wfcount = 0
             self.firstcalc = False
+
         self.wfcount += 1
-        self.wfacc += datalist  # Accumulate data
-        if self.wfcount % nsum != 0:  # Don't plot wf data until enough spectra accumulated
+        self.wfacc += datalist  # Add new data to accumulator
+
+        if self.wfcount % nsum != 0:  # Wait for nsum spectra before updating
             return
-        else:
-            surface.blit(surface, (0, self.pixel_size[1]))  # push old wf down one row
-            for ix in range(self.datasize):
-                v = datalist[ix]  # self.wfacc[ix] / nsum #datalist[ix]        # dB units
-                vi = int(self.nsteps * (v - self.vmin) / (self.vmax - self.vmin))
-                vi = max(0, min(vi, self.nsteps - 1))
-                px_surf = self.pixels[vi]
-                x = int(ix * self.dx)
-                surface.blit(px_surf, (x, 0))
-            self.wfcount = 0  # Initialize counter
-            self.wfacc.fill(0)  # and accumulator
+
+        # Shift existing waterfall down by one row
+        surface.blit(surface, (0, self.pixel_size[1]))
+
+        # Draw new row
+        for ix in range(self.datasize):
+            v = datalist[ix]  # Get data value (in dB)
+            # Convert to palette index
+            vi = int(self.nsteps * (v - self.vmin) / (self.vmax - self.vmin))
+            vi = max(0, min(vi, self.nsteps - 1))  # Clamp to valid range
+            px_surf = self.pixels[vi]  # Get pre-rendered color surface
+            x = int(ix * self.dx)  # Calculate x position
+            surface.blit(px_surf, (x, 0))  # Draw pixel
+
+        # Reset for next accumulation cycle
+        self.wfcount = 0
+        self.wfacc.fill(0)
