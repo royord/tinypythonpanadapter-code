@@ -24,74 +24,104 @@
 # 01-04-2014 Initial Release
 
 import math
-
 import numpy as np
-import numpy.fft as fft
+import numpy.fft as fft  # FFT module from NumPy
 
 
 class DSP(object):
+    """Digital Signal Processing class to compute power spectrum from I/Q data.
+
+    This class processes complex I/Q (in-phase/quadrature) samples to produce
+    a log power spectrum in dB, with noise rejection and windowing.
+
+    Args:
+        opt: Options object with attributes like size (FFT size), buffers (number of buffers),
+             and pulse (threshold multiplier for pulse rejection)
+    """
+
     def __init__(self, opt):
-        self.opt = opt
-        self.stats = list()
-        # This is dB output for full scale 16bit input = max signal.
+        """Initialize DSP object with options and precompute window function."""
+        self.opt = opt  # Store options object for configuration
+        self.stats = list()  # Placeholder for statistics (not used in this code)
+
+        # Calibration factor: dB adjustment for full-scale 16-bit input
+        # For 16-bit signed int, max amplitude is 2^15, scaled by FFT size
         self.db_adjust = 20. * math.log10(self.opt.size * 2 ** 15)
-        self.rejected_count = 0
-        self.led_clip_ct = 0
-        # Use "Hanning" window function
-        self.w = np.empty(self.opt.size)
+
+        self.rejected_count = 0  # Counter for rejected buffers due to noise pulses
+        self.led_clip_ct = 0  # Counter for clipping indicator (e.g., for GUI LED)
+
+        # Precompute Hanning window to reduce spectral leakage
+        # Hanning: 0.5 * (1 - cos(2πi / (N-1))) for i = 0 to N-1
+        self.w = np.empty(self.opt.size)  # Array for window coefficients
         for i in range(self.opt.size):
             self.w[i] = 0.5 * (1. - math.cos((2 * math.pi * i) / (self.opt.size - 1)))
-        return
+
+        return  # Explicit return not needed, kept for original code fidelity
 
     def get_log_power_spectrum(self, data):
-        size = self.opt.size  # size of FFT in I,Q samples.
-        power_spectrum = np.zeros(size)
+        """Compute the log power spectrum from a chunk of I/Q data.
 
-        # Time-domain analysis: Often we have long normal signals interrupted
-        # by huge wide-band pulses that degrade our power spectrum average.
-        # We find the "normal" signal level, by computing the median of the
-        # absolute value.  We only do this for the first buffer of a chunk,
-        # using the median for the remaining buffers in the chunk.
-        # A "noise pulse" is a signal level greater than some threshold
-        # times the median.  When such a pulse is found, we skip the current
-        # buffer.  It would be better to blank out just the pulse, but that
-        # would be more costly in CPU time.
+        Processes multiple buffers within the data, rejects noise pulses,
+        applies a window function, computes FFT, and returns the log power spectrum.
 
-        # Find the median abs value of first buffer to use for this chunk.
-        td_median = np.median(np.abs(data[:size]))
-        # Calculate our current threshold relative to measured median.
-        td_threshold = self.opt.pulse * td_median
-        nbuf_taken = 0  # Actual number of buffers accumulated
+        Args:
+            data (np.array): Complex I/Q samples (length >= opt.size * opt.buffers)
+
+        Returns:
+            np.array: Log power spectrum in dB, adjusted so max signal = 0 dB
+        """
+        size = self.opt.size  # FFT size (number of samples per buffer)
+        power_spectrum = np.zeros(size)  # Initialize power spectrum accumulator
+
+        # --- Noise Pulse Rejection ---
+        # Analyze time-domain data to reject buffers with large pulses
+        # Use median of absolute values from first buffer as "normal" signal level
+        td_median = np.median(np.abs(data[:size]))  # Median of first buffer
+        td_threshold = self.opt.pulse * td_median  # Threshold for pulse detection
+        nbuf_taken = 0  # Count of accepted buffers
+
+        # Process each buffer in the chunk
         for ic in range(self.opt.buffers):
+            # Extract one buffer’s worth of data
             td_segment = data[ic * size:(ic + 1) * size]
 
-            # remove the 0hz spike
+            # Remove DC offset (0 Hz spike) by subtracting mean
             td_segment = np.subtract(td_segment, np.average(td_segment))
 
-            td_max = np.amax(np.abs(td_segment))  # Do we have a noise pulse?
-            if td_max < td_threshold:  # No, get pwr spectrum etc.
-                # EXPERIMENTAL TAPERfd
+            # Check for noise pulses by finding max absolute value
+            td_max = np.amax(np.abs(td_segment))
+            if td_max < td_threshold:  # Accept buffer if below threshold
+                # Apply Hanning window to reduce spectral leakage
                 td_segment *= self.w
 
+                # Compute FFT to transform to frequency domain
                 fd_spectrum = fft.fft(td_segment)
-                # Frequency-domain:
-                # Rotate array to place 0 freq. in center.  (It was at left.)
+
+                # Shift FFT so 0 Hz is in the center (originally at index 0)
                 fd_spectrum_rot = np.fft.fftshift(fd_spectrum)
-                # Compute the real-valued squared magnitude (ie power) and 
-                # accumulate into pwr_acc.
-                # fastest way to sum |z|**2 ??
+
+                # Compute power spectrum: |z|^2 = z * z conjugate
+                # Accumulate into power_spectrum
+                power_spectrum += np.real(fd_spectrum_rot * fd_spectrum_rot.conj())
                 nbuf_taken += 1
-                power_spectrum = power_spectrum + \
-                    np.real(fd_spectrum_rot * fd_spectrum_rot.conj())
-            else:  # Yes, abort buffer.
-                self.rejected_count += 1
-                self.led_clip_ct = 1  # flash a red light
+            else:  # Reject buffer if noise pulse detected
+                self.rejected_count += 1  # Increment rejection counter
+                self.led_clip_ct = 1  # Set clipping indicator for GUI
+                # Optional debug output (commented out)
                 # if DEBUG: print "REJECT! %d" % self.rejected_count
+
+        # --- Normalize and Convert to dB ---
         if nbuf_taken > 0:
-            power_spectrum = power_spectrum / nbuf_taken  # normalize the sum.
+            # Average power spectrum over accepted buffers
+            power_spectrum = power_spectrum / nbuf_taken
         else:
-            power_spectrum = np.ones(size)  # if no good buffers!
-        # Convert to dB. Note log(0) = "-inf" in Numpy. It can happen if ADC 
-        # isn't working right. Numpy issues a warning.
+            # If all buffers rejected, return flat spectrum (1’s)
+            power_spectrum = np.ones(size)
+
+        # Convert power to dB: 10 * log10(power)
+        # Note: log(0) results in -inf, which can occur if ADC fails
         log_power_spectrum = 10. * np.log10(power_spectrum)
-        return log_power_spectrum - self.db_adjust  # max poss. signal = 0 dB
+
+        # Adjust so max possible signal (full-scale input) is 0 dB
+        return log_power_spectrum - self.db_adjust
