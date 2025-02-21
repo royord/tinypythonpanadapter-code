@@ -45,8 +45,10 @@ import sys
 import threading
 import time
 import psutil
+import math
 
 import numpy as np
+import argparse
 import pygame as pg
 
 import lib.iq_dsp as dsp
@@ -154,76 +156,118 @@ class LED(object):
         return self.surface
 
 
+import pygame as pg
+
+# Assuming BLACK is defined globally elsewhere in the codebase
+BLACK = (0, 0, 0)
+
+
 class Graticule(object):
-    """ Create a pygame surface with freq / power (dB) grid
-        and units.
-        input: options, pg font, graticule height, width, line color, 
-            and text color
+    """Create a pygame surface with frequency/power (dB) grid and units.
+
+    This class generates a grid for visualizing spectral data, with a vertical dB scale
+    and a horizontal frequency scale.
+
+    Args:
+        opt: Options object containing sample_rate, sp_max, and sp_min attributes
+        font: Pygame font object for rendering text labels
+        h: Height of the graticule surface in pixels
+        w: Width of the graticule surface in pixels
+        color_l: RGB tuple specifying the color for grid lines
+        color_t: RGB tuple specifying the color for text labels
     """
 
     def __init__(self, opt, font, h, w, color_l, color_t):
-        self.opt = opt
-        self.sp_max = opt.sp_max  # -20   # default max value (dB)
-        self.sp_min = opt.sp_min  # -120  # default min value
-        self.font = font  # font to use for text
-        self.h = h  # height of graph area
-        self.w = w  # width
-        self.color_l = color_l  # color for lines
-        self.color_t = color_t  # color for text
-        self.surface = pg.Surface((self.w, self.h))
-        return
+        """Initialize the graticule object with display and scale parameters."""
+        self.opt = opt  # Store options object for accessing sample_rate, etc.
+        self.sp_max = opt.sp_max  # Maximum dB value (default typically -20 dB)
+        self.sp_min = opt.sp_min  # Minimum dB value (default typically -120 dB)
+        self.font = font  # Font object for text rendering
+        self.h = h  # Height of the graticule surface
+        self.w = w  # Width of the graticule surface
+        self.color_l = color_l  # Color for drawing grid lines
+        self.color_t = color_t  # Color for rendering text labels
+        self.surface = pg.Surface((self.w, self.h))  # Create pygame surface for drawing
+        return  # Explicit return not needed, included for original code fidelity
 
     def make(self):
-        """ Make or re-make the graticule.
-            Returns pygame surface
+        """Make or re-make the graticule surface with dB and frequency scales.
+
+        This method draws horizontal lines for dB levels and vertical lines for frequency
+        ticks, along with corresponding labels.
+
+        Returns:
+            pygame.Surface: The rendered graticule surface
         """
-        self.surface.fill(BLACK)
-        # yscale is screen units per dB
+        self.surface.fill(BLACK)  # Clear the surface with a black background
+
+        # Calculate vertical scale: pixels per dB
         yscale = float(self.h) / (self.sp_max - self.sp_min)
-        # Define vertical dB scale - draw line each 10 dB.
-        for attn in range(self.sp_min, self.sp_max, 10):
+
+        # Draw horizontal dB scale with lines every 10 dB
+        for attn in range(self.sp_min, self.sp_max, 10):  # Iterate from min to max-10
+            # Calculate y-position in pixel coordinates with a 3-pixel offset
             yattn = ((attn - self.sp_min) * yscale) + 3.
-            yattnflip = self.h - yattn  # screen y coord increases downward
-            # Draw a single line, dark red.
-            pg.draw.line(self.surface, self.color_l, (0, yattnflip),
-                         (self.w, yattnflip))
-            # Render and blit the dB value at left, just above line
+            yattnflip = self.h - yattn  # Invert y since screen y increases downward
+
+            # Draw horizontal grid line across the full width
+            pg.draw.line(self.surface, self.color_l, (0, yattnflip), (self.w, yattnflip))
+
+            # Render and place dB label 12 pixels above the line, 5 pixels from left
             self.surface.blit(self.font.render("%3d" % attn, 1, self.color_t),
                               (5, yattnflip - 12))
 
-        # add unit (dB) to topmost label        
-        ww, hh = self.font.size("%3d" % attn)
+        # Add "dB" unit label next to the last dB value (topmost label)
+        ww, hh = self.font.size("%3d" % attn)  # Get width and height of last label
         self.surface.blit(self.font.render("dB", 1, self.color_t),
-                          (5 + ww, yattnflip - 12))
+                          (5 + ww, yattnflip - 12))  # Position "dB" right of the number
 
-        # Define freq. scale - draw vert. line at convenient intervals
-        frq_range = float(self.opt.sample_rate) / 1000.  # kHz total bandwidth
-        xscale = self.w / frq_range  # pixels/kHz x direction
-        srate2 = frq_range / 2  # plus or minus kHz
-        # Choose the best tick that will work with RTL or sound cards.
+        # --- Frequency Scale (Horizontal Axis) ---
+        frq_range = float(self.opt.sample_rate) / 1000.  # Total bandwidth in kHz
+        xscale = self.w / frq_range  # Pixels per kHz
+        srate2 = frq_range / 2  # Half the bandwidth (for positive/negative range)
+
+        # Determine the largest tick interval that fits within half the bandwidth
         for xtick_max in [800, 400, 200, 100, 80, 40, 20, 10]:
             if xtick_max < srate2:
-                break
+                break  # Exit with the first tick value less than half bandwidth
+
+        # Define frequency tick positions (symmetric around center)
         ticks = [-xtick_max, -xtick_max / 2, 0, xtick_max / 2, xtick_max]
+
+        # Draw vertical frequency ticks and labels
         for offset in ticks:
+            # Calculate x-position centered around the middle of the surface
             x = offset * xscale + self.w / 2
+            # Draw vertical line from top to bottom
             pg.draw.line(self.surface, self.color_l, (x, 0), (x, self.h))
+            # Format label: "0 kHz" for center, "+XXX" or "-XXX" for others
             fmt = "%d kHz" if offset == 0 else "%+3d"
+            # Render and place label 2 pixels right of the line at the top
             self.surface.blit(self.font.render(fmt % offset, 1, self.color_t),
                               (x + 2, 0))
-        return self.surface
+
+        return self.surface  # Return the completed graticule surface
 
     def set_range(self, sp_min, sp_max):
-        """ Set desired range for vertical scale in dB, min. and max.
-            0 dB is maximum theoretical response for 16 bit sampling.
-            Lines are always drawn at 10 dB intervals.
+        """Set the desired range for the vertical dB scale.
+
+        Updates the minimum and maximum dB values for the graticule.
+
+        Args:
+            sp_min (float): Minimum dB value for the scale
+            sp_max (float): Maximum dB value for the scale (must be > sp_min)
+
+        Note: 0 dB represents the maximum theoretical response for 16-bit sampling.
+              Lines are fixed at 10 dB intervals.
         """
+        # Validate that max is greater than min to ensure a valid scale
         if not sp_max > sp_min:
             print("Invalid dB scale setting requested!")
-            quit_all()
-        self.sp_max = sp_max
-        self.sp_min = sp_min
-        return
+            quit_all()  # Exit program (assumes quit_all() is defined elsewhere)
+        self.sp_max = sp_max  # Update maximum dB value
+        self.sp_min = sp_min  # Update minimum dB value
+        return  # No return value needed
 
 
 # THREAD: Hamlib, checking Rx frequency, and changing if requested.
@@ -456,115 +500,204 @@ if opt.control == "si570":
 
 # ** MAIN PROGRAM LOOP **
 
-run_flag = True  # set false to suspend for help screen etc.
-info_phase = 1  # > 0 --> show info overlay
-info_counter = 0
-tloop = 0.
-t_last_data = 0.
-nframe = 0
-t_frame0 = time.time()
-led_overflow_ct = 0
-startqueue = True
+run_flag = True  # Set to False to pause for help screen or other overlays
+info_phase = 1  # > 0 shows info overlay
+info_counter = 0  # Counter for info display timing
+tloop = 0.  # Loop timing variable
+t_last_data = 0.  # Timestamp of last data update
+nframe = 0  # Frame counter
+t_frame0 = time.time()  # Start time for frame rate calculation
+led_overflow_ct = 0  # Overflow LED counter
+startqueue = True  # Flag to start data queue
+
+
+def get_gradient_color(y, y_min, y_max):
+    """Map a y-value to a color gradient from green to yellow to red.
+
+    Args:
+        y (float): Current y-value (screen coordinate, higher values = lower on screen)
+        y_min (float): Minimum y-value (top of graph)
+        y_max (float): Maximum y-value (bottom of graph)
+
+    Returns:
+        tuple: RGB color (green at y_min, yellow in middle, red at y_max)
+    """
+    # Normalize y to 0-1 range (0 at top, 1 at bottom)
+    f = (y - y_min) / (y_max - y_min) if y_max > y_min else 0
+    f = max(0, min(1, f))  # Clamp to 0-1
+
+    if f < 0.25:  # Red to Orange (0 to 0.25)
+        t = f / 0.25  # Normalize within this segment (0 to 1)
+        r = 255  # Red stays at max
+        g = int(165 * t)  # Green increases from 0 to 165
+        b = 0  # No blue
+    elif f < 0.5:  # Orange to Yellow (0.25 to 0.5)
+        t = (f - 0.25) / 0.25
+        r = 255  # Red stays at max
+        g = int(165 + 90 * t)  # Green increases from 165 to 255
+        b = 0  # No blue
+    elif f < 0.75:  # Yellow to Green (0.5 to 0.75)
+        t = (f - 0.5) / 0.25
+        r = int(255 * (1 - t))  # Red decreases from 255 to 0
+        g = 255  # Green stays at max
+        b = 0  # No blue
+    else:  # Green to Blue (0.75 to 1)
+        t = (f - 0.75) / 0.25
+        r = 0  # Red stays at 0
+        g = int(255 * (1 - t))  # Green decreases from 255 to 0
+        b = int(255 * t)  # Blue increases from 0 to 255
+
+    return (r, g, b)
+
+
+def palette_color(palette, val, vmin0, vmax0):
+    """Translate a data value into a color using different palette methods.
+
+    Args:
+        palette (int): 1 for stepped RGB (red-yellow-white), 2 for rainbow
+        val (float): Value to map (e.g., y-position or dB)
+        vmin0 (float): Minimum value for scaling
+        vmax0 (float): Maximum value for scaling
+
+    Returns:
+        tuple: RGB color values (0-255)
+    """
+    # Normalize value to 0-1 range, then scale to 0-2
+    f = (float(val) - vmin0) / (vmax0 - vmin0)  # Between 0 and 1.0
+    f *= 2  # Scale to 0-2
+    f = min(1., max(0., f))  # Clamp to 0-1 for palette range
+    if palette == 0:
+        # return 255, 255, 255
+        return 0,0,0
+    if palette == 1:  # Simple RGB stepped palette
+        g, b = 0, 0
+        if f < 0.333:  # Red phase
+            r = int(f * 255 * 3)  # Red ramps up
+        elif f < 0.666:  # Yellow phase (red + green)
+            r = 200  # Red fixed
+            g = int((f - .333) * 255 * 3)  # Green ramps up
+        else:  # White phase (red + green + blue)
+            r = 200  # Red fixed
+            g = 200  # Green fixed
+            b = int((f - .666) * 255 * 3)  # Blue ramps up
+    elif palette == 2:  # Continuous rainbow palette
+        bright = min(1.0, f + 0.15)  # Brightness adjustment
+        tpi = 2 * math.pi
+        # Use cosine waves with phase shifts for smooth color transitions
+        r = bright * 128 * (1.0 + math.cos(tpi * f))
+        g = bright * 128 * (1.0 + math.cos(tpi * f + tpi / 3))
+        b = bright * 128 * (1.0 + math.cos(tpi * f + 2 * tpi / 3))
+    else:
+        print("Invalid palette requested!")
+        sys.exit()
+
+    # Ensure color values stay within valid RGB range (0-255)
+    return max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b))
+
 
 while True:
+    nframe += 1  # Increment frame counter for tracking loop iterations
 
-    nframe += 1  # keep track of loop count FWIW
+    # Reconstruct the main screen each loop
+    surf_main.fill(BGCOLOR)  # Clear main surface with background color
 
-    # Each time through the main loop, we reconstruct the main screen
-
-    surf_main.fill(BGCOLOR)  # Erase with background color
-
-    # Each time through this loop, we receive an audio chunk, containing
-    # multiple buffers.  The buffers have been transformed and the log power
-    # spectra from each buffer will be provided in sp_log, which will be
-    # plotted in the "2d" graph area.  After a number of log spectra are
-    # displayed in the "2d" graph, a new line of the waterfall is generated.
-
-    # Line of text with receiver center freq. if available
+    # Process a chunk of audio/RTL data, compute log power spectrum, and update display
+    # --- Display Receiver Center Frequency ---
     showfreq = True
     if opt.control == "si570":
-        msg = "%.3f kHz" % (mysi570.getFreqByValue() * 1000.)  # freq/4 from Si570
+        msg = "%.3f kHz" % (mysi570.getFreqByValue() * 1000.)  # Si570 frequency
     elif opt.hamlib:
-        msg = "%.3f kHz" % rigfreq  # take current rigfreq from hamlib thread
+        msg = "%.3f kHz" % rigfreq  # Hamlib frequency
     elif opt.control == 'rtl':
-        msg = "%.3f MHz" % (dataIn.rtl.get_center_freq() / 1.e6)
+        msg = "%.3f MHz" % (dataIn.rtl.get_center_freq() / 1.e6)  # RTL-SDR frequency
     else:
         showfreq = False
 
     if showfreq:
-        # Center it and blit just above 2d display
-        ww, hh = lgfont.size(msg)
+        ww, hh = lgfont.size(msg)  # Text dimensions
+        # Center frequency text above 2D display
         surf_main.blit(lgfont.render(msg, 1, BLACK, BGCOLOR),
                        (w_middle + x_spectra - ww / 2, y_2d - hh))
 
-    # show overflow & underrun indicators (for audio, not rtl)
+    # --- Audio Buffer Status Indicators ---
     if opt.source == 'audio':
-        if af.led_underrun_ct > 0:  # underflow flag in af module
+        # Underrun indicator
+        if af.led_underrun_ct > 0:
             sled = led_urun.get_LED_surface(RED)
-            af.led_underrun_ct -= 1  # count down to extinguish
+            af.led_underrun_ct -= 1
         else:
-            sled = led_urun.get_LED_surface(None)  # off!
+            sled = led_urun.get_LED_surface(None)
         msg = "Buffer underrun"
         ww, hh = medfont.size(msg)
         ww1 = SCREEN_SIZE[0] - ww - 10
         surf_main.blit(medfont.render(msg, 1, BLACK, BGCOLOR), (ww1, y_2d - hh))
         surf_main.blit(sled, (ww1 - 15, y_2d - hh))
-        if myDSP.led_clip_ct > 0:  # overflow flag
+
+        # Clipping indicator
+        if myDSP.led_clip_ct > 0:
             sled = led_clip.get_LED_surface(RED)
             myDSP.led_clip_ct -= 1
         else:
-            sled = led_clip.get_LED_surface(None)  # off!
+            sled = led_clip.get_LED_surface(None)
         msg = "Pulse clip"
         ww, hh = medfont.size(msg)
         surf_main.blit(medfont.render(msg, 1, BLACK, BGCOLOR), (25, y_2d - hh))
         surf_main.blit(sled, (10, y_2d - hh))
 
-    if opt.source == 'rtl':  # Input from RTL-SDR dongle
-        iq_data_cmplx = dataIn.read_samples(chunk_size)
-        if opt.rev_iq:  # reverse spectrum?
+    # --- Data Acquisition ---
+    if opt.source == 'rtl':
+        iq_data_cmplx = dataIn.read_samples(chunk_size)  # Read RTL-SDR samples
+        if opt.rev_iq:
             iq_data_cmplx = np.imag(iq_data_cmplx) + 1j * np.real(iq_data_cmplx)
-        time.sleep(0.05)  # slow down if fast PC
-        stats = [0, 0]  # for now...
-    else:  # Input from audio card
-        # In its separate thread, a chunk of audio data has accumulated.
-        # When ready, pull log power spectrum data out of queue.
-        my_in_data_s = dataIn.get_queued_data()  # timeout protected
-
-        # Convert string of 16-bit I,Q samples to complex floating
-        # iq_local = np.fromstring(my_in_data_s, dtype=np.int16).astype('float32')
+        time.sleep(0.05)  # Delay for slower PCs
+        stats = [0, 0]  # Placeholder stats
+    else:  # Audio input
+        my_in_data_s = dataIn.get_queued_data()  # Get queued audio data
         iq_local = np.frombuffer(my_in_data_s, dtype=np.int16).astype('float32')
-
-        re_d = np.array(iq_local[1::2])  # right input (I)
-        im_d = np.array(iq_local[0::2])  # left  input (Q)
-
-        # The PCM290x chip has 1 lag offset of R wrt L channel. Fix, if needed.
+        re_d = np.array(iq_local[1::2])  # I (right channel)
+        im_d = np.array(iq_local[0::2])  # Q (left channel)
         if opt.lagfix:
-            im_d = np.roll(im_d, 1)
-        # Get some stats (max values) to monitor gain settings, etc.
+            im_d = np.roll(im_d, 1)  # Fix PCM290x lag
         stats = [int(np.amax(re_d)), int(np.amax(im_d))]
-        if opt.rev_iq:  # reverse spectrum?
+        if opt.rev_iq:
             iq_data_cmplx = np.array(im_d + re_d * 1j)
-        else:  # normal spectrum
+        else:
             iq_data_cmplx = np.array(re_d + im_d * 1j)
 
-    sp_log = myDSP.get_log_power_spectrum(iq_data_cmplx)
-    if opt.source == 'rtl':  # Boost rtl spectrum (arbitrary amount)
-        sp_log += 60  # RTL data were normalized to +/- 1.
+    # --- Compute Spectrum ---
+    sp_log = myDSP.get_log_power_spectrum(iq_data_cmplx)  # Get log power spectrum
+    if opt.source == 'rtl':
+        sp_log += 60  # Boost RTL spectrum levels
 
-    yscale = float(h_2d) / (sp_max - sp_min)  # yscale is screen units per dB
-    # Set the 2d surface to background/graticule.
-    surf_2d.blit(surf_2d_graticule, (0, 0))
+    # --- Draw 2D Spectrum Graph ---
+    yscale = float(h_2d) / (sp_max - sp_min)  # Pixels per dB
+    surf_2d.blit(surf_2d_graticule, (0, 0))  # Reset with graticule background
 
-    # Draw the "2d" spectrum graph
+    # Scale spectrum to screen coordinates
     sp_scaled = ((sp_log - sp_min) * yscale) + 3.
     ylist = list(sp_scaled)
-    ylist = [h_2d - x for x in ylist]  # flip the y's
+    ylist = [h_2d - x for x in ylist]  # Flip y for screen (lower dB = higher y)
     lylist = len(ylist)
-    xlist = [x * w_spectra / lylist for x in range(lylist)]
-    # Draw the spectrum based on our data lists.
-    pg.draw.lines(surf_2d, WHITE, False, list(zip(xlist, ylist)), 1)
+    xlist = [x * w_spectra / lylist for x in range(lylist)]  # X coordinates
 
-    # Place 2d spectrum on main surface
+    # Color pixels under the spectrum curve using palette_color
+    palette = 0  # Use stepped RGB palette (can change to 2 for rainbow)
+    for i in range(lylist):
+        x = int(xlist[i])  # Current x-position
+        y_top = int(ylist[i])  # Top of the curve (lower y = higher power)
+        y_bottom = h_2d  # Bottom of the graph
+
+        # Draw vertical line from bottom to curve with reversed palette
+        for y in range(int(y_top), int(y_bottom)):
+            # Reverse the mapping: lower y (higher power) -> lower value in palette
+            val = h_2d - y  # Invert y to map power (higher power = lower y)
+            color = palette_color(palette, val, 0, h_2d)  # White (top) to red (bottom)
+            surf_2d.set_at((x, y), color)
+
+    # Optionally draw the spectrum line on top (white outline)
+    pg.draw.lines(surf_2d, WHITE, False, list(zip(xlist, ylist)), 3)
+
+    # Blit 2D spectrum onto main surface
     surf_main.blit(surf_2d, (x_spectra, y_2d))
 
     if opt.waterfall:
