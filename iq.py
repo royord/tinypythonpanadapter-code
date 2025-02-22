@@ -156,7 +156,7 @@ class LED(object):
         return self.surface
 
 
-import pygame as pg
+
 
 # Assuming BLACK is defined globally elsewhere in the codebase
 BLACK = (0, 0, 0)
